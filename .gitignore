@@ -1,3 +1,13 @@
+# dotenv file
+.env
+
+# venv files
+venv/
+.venv/
+
+# sqlite db
+messages.db
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
