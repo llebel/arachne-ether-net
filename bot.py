@@ -98,7 +98,7 @@ async def on_message(message):
 # ----------------------
 # Commands
 # ----------------------
-# ✅ Commande manuelle pour déclencher le résumé
+# ✅ Manual command to trigger a summary generation
 @bot.command(name="resume")
 async def manual_resume(ctx, channel_name=None, period="today"):
     """Command to generate a summary manually.

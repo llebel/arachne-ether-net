@@ -1,14 +1,14 @@
 import os
 from dotenv import load_dotenv
 
-# Charger le fichier .env
+# Load .env file
 load_dotenv()
 
-# Récupérer les variables
+# Read corresponding variables
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-SUMMARY_CHANNEL = os.getenv("SUMMARY_CHANNEL", "résumés")  # valeur par défaut
-SUMMARY_HOUR = int(os.getenv("SUMMARY_HOUR", 20))  # valeur par défaut: 20h UTC
+SUMMARY_CHANNEL = os.getenv("SUMMARY_CHANNEL", "summaries")  # default value
+SUMMARY_HOUR = int(os.getenv("SUMMARY_HOUR", 20))  # default value: 20h UTC
 AUTHORIZED_USER_IDS = [
     int(user_id.strip())
     for user_id in os.getenv("AUTHORIZED_USER_IDS", "0").split(",")
