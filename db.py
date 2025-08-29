@@ -9,7 +9,6 @@ class MessageStore:
     def __init__(self, db_path="messages.db"):
         self.conn = sqlite3.connect(db_path)
         self._create_tables()
-        self._migrate_schema()
         logger.debug("Database initialized at %s", db_path)
 
     def _create_tables(self):
@@ -39,80 +38,6 @@ class MessageStore:
             )
         """
         )
-        self.conn.commit()
-
-    def _migrate_schema(self):
-        """Migrate existing database schema to include server and channel ID information."""
-        cursor = self.conn.cursor()
-
-        # Check if server_id column exists in messages table
-        cursor.execute("PRAGMA table_info(messages)")
-        columns = [column[1] for column in cursor.fetchall()]
-
-        if "server_id" not in columns:
-            logger.info("Migrating messages table to include server information")
-            # Add server columns to messages table
-            self.conn.execute("ALTER TABLE messages ADD COLUMN server_id TEXT")
-            self.conn.execute("ALTER TABLE messages ADD COLUMN server_name TEXT")
-            logger.info("Added server columns to messages table")
-
-        # Check if channel_id column exists (new migration for channel IDs)
-        if "channel_id" not in columns:
-            logger.info("Migrating messages table to include channel ID")
-            # Add channel_id column and rename channel to channel_name
-            self.conn.execute("ALTER TABLE messages ADD COLUMN channel_id TEXT")
-            self.conn.execute("ALTER TABLE messages ADD COLUMN channel_name TEXT")
-
-            # Copy existing channel data to channel_name
-            self.conn.execute(
-                "UPDATE messages SET channel_name = channel WHERE channel_name IS NULL"
-            )
-
-            logger.info(
-                "Added channel_id and channel_name columns - existing messages will need channel_id populated on reconnect"
-            )
-
-        # Check if we need to recreate channel_meta table with new schema
-        cursor.execute("PRAGMA table_info(channel_meta)")
-        channel_meta_columns = [column[1] for column in cursor.fetchall()]
-
-        needs_channel_meta_migration = (
-            "server_id" not in channel_meta_columns
-            or "channel_id" not in channel_meta_columns
-        )
-
-        if needs_channel_meta_migration:
-            logger.info(
-                "Migrating channel_meta table to include server and channel ID information"
-            )
-
-            # Backup existing channel_meta data if it exists
-            try:
-                cursor.execute("SELECT * FROM channel_meta LIMIT 1")
-                cursor.execute("SELECT channel, last_fetched FROM channel_meta")
-                old_data = cursor.fetchall()
-            except:
-                old_data = []
-
-            # Drop and recreate channel_meta table with new schema
-            self.conn.execute("DROP TABLE IF EXISTS channel_meta")
-            self.conn.execute(
-                """
-                CREATE TABLE channel_meta (
-                    server_id TEXT,
-                    server_name TEXT,
-                    channel_id TEXT,
-                    channel_name TEXT,
-                    last_fetched DATETIME,
-                    PRIMARY KEY (server_id, channel_id)
-                )
-            """
-            )
-
-            # Note: Old channel_meta data cannot be restored without server/channel IDs
-            # It will be rebuilt as the bot reconnects to channels
-            logger.info("Channel metadata will be rebuilt as bot reconnects to servers")
-
         self.conn.commit()
 
     def add_message(
