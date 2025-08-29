@@ -4,12 +4,13 @@ from config import OPENAI_API_KEY
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+
 def summarize(messages, channel_name=None):
     if not messages:
         return "Aucun message à résumer aujourd'hui."
 
     text = "\n".join([f"{author}: {content}" for author, content in messages])
-    
+
     channel_context = f" du canal #{channel_name}" if channel_name else ""
 
     prompt = f"""
