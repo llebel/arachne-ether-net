@@ -123,7 +123,7 @@ async def manual_resume(ctx):
         return
 
     # Envoyer le résumé dans Discord
-    await ctx.send(f"📋 Résumé demandé :\n\n{summary}")
+    await ctx.send(f"📋 Résumé des messages depuis le {since.date()} :\n\n{summary}")
     logger.info(
         f"Résumé envoyé par la commande !resume dans {ctx.guild} / {ctx.channel}"
     )
