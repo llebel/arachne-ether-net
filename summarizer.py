@@ -1,8 +1,8 @@
-import openai
-from openai import OpenAIError
+from openai import OpenAI
+from openai._exceptions import OpenAIError
 from config import OPENAI_API_KEY
 
-openai.api_key = OPENAI_API_KEY
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 def summarize(messages, channel_name=None):
     if not messages:
@@ -20,13 +20,13 @@ def summarize(messages, channel_name=None):
     """
 
     try:
-        response = openai.chat.completions.create(
+        response = client.responses.create(
             model="gpt-5-mini",
-            messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=1000,
+            input=prompt,
+            max_output_tokens=1000,
         )
-        # ⚡ Use .content instead of ["content"]
-        return response.choices[0].message.content.strip()
+        # ⚡ Use the Responses API format
+        return response.output_text.strip()
 
     except OpenAIError:
         return "⚠️ Impossible de générer le résumé pour l'instant (erreur OpenAI)."
