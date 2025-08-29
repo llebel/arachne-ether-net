@@ -123,9 +123,17 @@ class DailySummary:
                                 )
                             except:
                                 pass  # Message might have been deleted
+                        # Get category information for this channel from channel_meta
+                        _, category_name_cat = store.get_channel_category(
+                            channel_name=channel_name, server_id=server_id
+                        )
+                        category_display = (
+                            f" [{category_name_cat}]" if category_name_cat else ""
+                        )
+
                         summary = summarize(messages, channel_name)
                         summaries.append(
-                            f"**#{channel_name}** ({len(messages)} messages):\n{summary}"
+                            f"**#{channel_name}**{category_display} ({len(messages)} messages):\n{summary}"
                         )
 
                 # Delete thinking message

@@ -33,6 +33,8 @@ class MessageStore:
                 server_name TEXT,
                 channel_id TEXT,
                 channel_name TEXT,
+                category_id TEXT,
+                category_name TEXT,
                 last_fetched DATETIME,
                 PRIMARY KEY (server_id, channel_id)
             )
@@ -205,22 +207,33 @@ class MessageStore:
         return None
 
     def update_last_fetched(
-        self, channel_id, timestamp, server_id, server_name=None, channel_name=None
+        self,
+        channel_id,
+        timestamp,
+        server_id,
+        server_name=None,
+        channel_name=None,
+        category_id=None,
+        category_name=None,
     ):
         self.conn.execute(
             """
-            INSERT INTO channel_meta(server_id, server_name, channel_id, channel_name, last_fetched)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO channel_meta(server_id, server_name, channel_id, channel_name, category_id, category_name, last_fetched)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(server_id, channel_id) DO UPDATE SET 
                 last_fetched=excluded.last_fetched,
                 server_name=excluded.server_name,
-                channel_name=excluded.channel_name
+                channel_name=excluded.channel_name,
+                category_id=excluded.category_id,
+                category_name=excluded.category_name
         """,
             (
                 str(server_id),
                 str(server_name) if server_name else None,
                 str(channel_id),
                 str(channel_name) if channel_name else None,
+                str(category_id) if category_id else None,
+                str(category_name) if category_name else None,
                 timestamp.isoformat(),
             ),
         )
@@ -321,3 +334,34 @@ class MessageStore:
 
         logger.info("Found %d servers in database", len(results))
         return results
+
+    def get_channel_category(self, channel_id=None, channel_name=None, server_id=None):
+        """Get category information for a specific channel.
+
+        Args:
+            channel_id: Channel ID (preferred)
+            channel_name: Channel name (fallback)
+            server_id: Server ID for disambiguation
+
+        Returns:
+            Tuple of (category_id, category_name) or (None, None) if no category found
+        """
+        if channel_id and server_id:
+            # Preferred: lookup by channel_id and server_id
+            row = self.conn.execute(
+                "SELECT category_id, category_name FROM channel_meta WHERE channel_id = ? AND server_id = ?",
+                (str(channel_id), str(server_id)),
+            ).fetchone()
+        elif channel_name and server_id:
+            # Fallback: lookup by channel_name and server_id
+            row = self.conn.execute(
+                "SELECT category_id, category_name FROM channel_meta WHERE channel_name = ? AND server_id = ?",
+                (channel_name, str(server_id)),
+            ).fetchone()
+        else:
+            return (None, None)
+
+        if row:
+            return (row[0], row[1])
+        else:
+            return (None, None)

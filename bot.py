@@ -90,13 +90,17 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # Get server information
+    # Get server and channel information
     server_id = str(message.guild.id) if message.guild else None
     server_name = message.guild.name if message.guild else None
     channel_id = str(message.channel.id)
 
+    # Get category information
+    category_id = str(message.channel.category_id) if message.channel.category else None
+    category_name = message.channel.category.name if message.channel.category else None
+
     logger.info(
-        f"Seen message on server {server_name}({server_id}) / channel #{message.channel.name}({channel_id}) / user @{str(message.author)}"
+        f"Seen message on server {server_name}({server_id}) / category {category_name}({category_id}) / channel #{message.channel.name}({channel_id}) / user @{str(message.author)}"
     )
     store.add_message(
         str(message.author),
@@ -125,6 +129,8 @@ async def manual_resume(ctx, channel_name=None, period="today"):
         !resume 3days - Summary for current channel from 3 days ago to now
         !resume channel_name 3days - Summary for specified channel from 3 days ago to now
         !resume all 7days - Summary for all channels from 7 days ago to now
+
+    Note: Summaries now include channel category information where available.
     """
     # Check if user is authorized
     if ctx.author.id not in config.AUTHORIZED_USER_IDS:
@@ -226,9 +232,17 @@ async def manual_resume(ctx, channel_name=None, period="today"):
                     await thinking_msg.edit(
                         content=f"⚙️ Génération des résumés... ({i+1}/{len(active_channels)}) #{channel}"
                     )
+                    # Get category information for this channel from channel_meta
+                    _, category_name_cat = store.get_channel_category(
+                        channel_name=channel, server_id=server_id
+                    )
+                    category_display = (
+                        f" [{category_name_cat}]" if category_name_cat else ""
+                    )
+
                     summary = summarize(messages, channel)
                     summaries.append(
-                        f"**#{channel}** ({len(messages)} messages):\n{summary}"
+                        f"**#{channel}**{category_display} ({len(messages)} messages):\n{summary}"
                     )
 
             # Delete thinking message
@@ -314,6 +328,10 @@ async def fetch_history(channel, days=7):
     server_name = channel.guild.name if channel.guild else None
     channel_id = str(channel.id)
 
+    # Get category information
+    category_id = str(channel.category_id) if channel.category else None
+    category_name = channel.category.name if channel.category else None
+
     last_fetched = (
         store.get_last_fetched(channel_id, server_id, channel.name)
         if server_id
@@ -322,7 +340,7 @@ async def fetch_history(channel, days=7):
     after_date = last_fetched or (datetime.now(timezone.utc) - timedelta(days=days))
 
     logger.info(
-        f"Fetching Discord messages from #{channel.name}({channel_id}) on server {server_name} since {after_date.isoformat()}"
+        f"Fetching Discord messages from #{channel.name}({channel_id}) in category {category_name}({category_id}) on server {server_name} since {after_date.isoformat()}"
     )
 
     # Pulling message history from Discord
@@ -339,7 +357,7 @@ async def fetch_history(channel, days=7):
                     channel_id=channel_id,
                 )
 
-        # Update last fetched timestamp
+        # Update last fetched timestamp (including category info for channel metadata)
         if server_id:
             store.update_last_fetched(
                 channel_id,
@@ -347,6 +365,8 @@ async def fetch_history(channel, days=7):
                 server_id,
                 server_name,
                 channel.name,
+                category_id,
+                category_name,
             )
     except Exception as e:
         logger.warning(
