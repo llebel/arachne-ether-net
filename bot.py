@@ -97,8 +97,14 @@ async def on_message(message):
 # ----------------------
 # ✅ Commande manuelle pour déclencher le résumé
 @bot.command(name="resume")
-async def manual_resume(ctx):
-    """Command to generate a summary manually."""
+async def manual_resume(ctx, channel_name=None):
+    """Command to generate a summary manually.
+    
+    Usage:
+        !resume - Generate summary for current channel
+        !resume channel_name - Generate summary for specified channel
+        !resume all - Generate summaries for all active channels
+    """
     # Check if user is authorized
     if ctx.author.id not in config.AUTHORIZED_USER_IDS:
         logger.warning(
@@ -109,10 +115,46 @@ async def manual_resume(ctx):
     since = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
-    messages = store.get_messages_since(since)
 
     try:
-        summary = summarize(messages)
+        if channel_name == "all":
+            # Generate summaries for all active channels
+            active_channels = store.get_active_channels(since)
+            if not active_channels:
+                await ctx.send("📋 Aucun message trouvé depuis minuit dans aucun canal.")
+                return
+                
+            summaries = []
+            for channel in active_channels:
+                messages = store.get_messages_since(since, channel)
+                if messages:
+                    summary = summarize(messages, channel)
+                    summaries.append(f"**#{channel}** ({len(messages)} messages):\n{summary}")
+            
+            if summaries:
+                full_summary = f"📋 Résumés de tous les canaux depuis le {since.date()} :\n\n" + "\n\n---\n\n".join(summaries)
+                # Split if too long for Discord
+                if len(full_summary) > 1800:
+                    await ctx.send(f"📋 Résumés de tous les canaux depuis le {since.date()} :")
+                    for summary_part in summaries:
+                        await ctx.send(summary_part)
+                else:
+                    await ctx.send(full_summary)
+            else:
+                await ctx.send("📋 Aucun message à résumer depuis minuit.")
+                
+        else:
+            # Generate summary for specific channel or current channel
+            target_channel = channel_name or ctx.channel.name
+            messages = store.get_messages_since(since, target_channel)
+            
+            if not messages:
+                await ctx.send(f"📋 Aucun message trouvé depuis minuit dans #{target_channel}.")
+                return
+                
+            summary = summarize(messages, target_channel)
+            await ctx.send(f"📋 Résumé de #{target_channel} depuis le {since.date()} ({len(messages)} messages) :\n\n{summary}")
+            
     except OpenAIError as e:
         logger.error(f"OpenAI error while generating summary: {e}")
         await ctx.send(f"⚠️ Impossible de générer le résumé pour l'instant : {str(e)}")
@@ -122,8 +164,6 @@ async def manual_resume(ctx):
         await ctx.send(f"⚠️ Une erreur inattendue est survenue : {str(e)}")
         return
 
-    # Envoyer le résumé dans Discord
-    await ctx.send(f"📋 Résumé des messages depuis le {since.date()} :\n\n{summary}")
     logger.info(
         f"Résumé envoyé par la commande !resume dans {ctx.guild} / {ctx.channel}"
     )

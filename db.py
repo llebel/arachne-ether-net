@@ -42,15 +42,28 @@ class MessageStore:
         self.conn.execute(query, params)
         self.conn.commit()
 
-    def get_messages_since(self, since_datetime):
-        """Return a list of tuples (author, content) for messages since `since_datetime`."""
-        query = "SELECT author, content FROM messages WHERE timestamp >= ? ORDER BY timestamp ASC"
-        params = (since_datetime.isoformat(),)
+    def get_messages_since(self, since_datetime, channel=None):
+        """Return a list of tuples (author, content) for messages since `since_datetime`.
+        
+        Args:
+            since_datetime: Start datetime for message retrieval
+            channel: Optional channel name to filter by. If None, returns all channels.
+        """
+        if channel:
+            query = "SELECT author, content FROM messages WHERE timestamp >= ? AND channel = ? ORDER BY timestamp ASC"
+            params = (since_datetime.isoformat(), channel)
+        else:
+            query = "SELECT author, content FROM messages WHERE timestamp >= ? ORDER BY timestamp ASC"
+            params = (since_datetime.isoformat(),)
 
         logger.debug("Executing query: %s | params=%s", query, params)
         cursor = self.conn.execute(query, params)
         results = cursor.fetchall()
-        logger.info("Fetched %d messages since %s", len(results), since_datetime)
+        
+        if channel:
+            logger.info("Fetched %d messages from #%s since %s", len(results), channel, since_datetime)
+        else:
+            logger.info("Fetched %d messages from all channels since %s", len(results), since_datetime)
 
         return results
 
@@ -72,3 +85,15 @@ class MessageStore:
             (channel, timestamp.isoformat()),
         )
         self.conn.commit()
+
+    def get_active_channels(self, since_datetime):
+        """Return list of channels that have messages since the given datetime."""
+        query = "SELECT DISTINCT channel FROM messages WHERE timestamp >= ? ORDER BY channel"
+        params = (since_datetime.isoformat(),)
+        
+        logger.debug("Executing query: %s | params=%s", query, params)
+        cursor = self.conn.execute(query, params)
+        results = [row[0] for row in cursor.fetchall()]
+        
+        logger.info("Found %d active channels since %s", len(results), since_datetime)
+        return results
