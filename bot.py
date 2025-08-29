@@ -89,8 +89,14 @@ async def on_connect():
 async def on_message(message):
     if message.author.bot:
         return
+    
+    # Get server information
+    server_id = str(message.guild.id) if message.guild else None
+    server_name = message.guild.name if message.guild else None
+    
     store.add_message(
-        str(message.author), message.content, message.channel.name, message.created_at
+        str(message.author), message.content, message.channel.name, message.created_at,
+        server_id=server_id, server_name=server_name
     )
     await bot.process_commands(message)
 
@@ -167,23 +173,28 @@ async def manual_resume(ctx, channel_name=None, period="today"):
         time_desc = f"depuis le {start_time.date()}"
         period_type = "since"
 
+    # Get current server information
+    server_id = str(ctx.guild.id) if ctx.guild else None
+    server_name = ctx.guild.name if ctx.guild else None
+
     try:
         if channel_name == "all":
-            # Generate summaries for all active channels
+            # Generate summaries for all active channels in current server
             if period_type == "range":
                 active_channels = store.get_active_channels_in_range(
-                    start_time, end_time
+                    start_time, end_time, server_id
                 )
             else:
-                active_channels = store.get_active_channels(start_time)
+                active_channels = store.get_active_channels(start_time, server_id)
 
             if not active_channels:
-                await ctx.send(f"📋 Aucun message trouvé {time_desc} dans aucun canal.")
+                server_desc = f" sur {server_name}" if server_name else ""
+                await ctx.send(f"📋 Aucun message trouvé {time_desc} dans aucun canal{server_desc}.")
                 return
 
             # Send initial "thinking" message
             thinking_msg = await ctx.send(
-                f"⚙️ Génération des résumés pour {len(active_channels)} canaux..."
+                f"⚙️ Génération des résumés pour {len(active_channels)} canaux sur {server_name}..."
             )
 
             summaries = []
@@ -191,10 +202,10 @@ async def manual_resume(ctx, channel_name=None, period="today"):
             for i, channel in enumerate(active_channels):
                 if period_type == "range":
                     messages = store.get_messages_in_range(
-                        start_time, end_time, channel
+                        start_time, end_time, channel, server_id
                     )
                 else:
-                    messages = store.get_messages_since(start_time, channel)
+                    messages = store.get_messages_since(start_time, channel, server_id)
 
                 if messages:
                     total_messages += len(messages)
@@ -211,7 +222,8 @@ async def manual_resume(ctx, channel_name=None, period="today"):
             await thinking_msg.delete()
 
             if summaries:
-                header = f"📋 Résumés de tous les canaux {time_desc} ({total_messages} messages sur {len(active_channels)} canaux) :\n\n"
+                server_desc = f" sur **{server_name}**" if server_name else ""
+                header = f"📋 Résumés de tous les canaux {time_desc}{server_desc} ({total_messages} messages sur {len(active_channels)} canaux) :\n\n"
                 full_summary = header + "\n\n---\n\n".join(summaries)
 
                 # Use safe_send to handle long messages
@@ -220,19 +232,20 @@ async def manual_resume(ctx, channel_name=None, period="today"):
                 await ctx.send(f"📋 Aucun message à résumer {time_desc}.")
 
         else:
-            # Generate summary for specific channel or current channel
+            # Generate summary for specific channel or current channel in current server
             target_channel = channel_name or ctx.channel.name
 
             if period_type == "range":
                 messages = store.get_messages_in_range(
-                    start_time, end_time, target_channel
+                    start_time, end_time, target_channel, server_id
                 )
             else:
-                messages = store.get_messages_since(start_time, target_channel)
+                messages = store.get_messages_since(start_time, target_channel, server_id)
 
             if not messages:
+                server_desc = f" sur {server_name}" if server_name else ""
                 await ctx.send(
-                    f"📋 Aucun message trouvé {time_desc} dans #{target_channel}."
+                    f"📋 Aucun message trouvé {time_desc} dans #{target_channel}{server_desc}."
                 )
                 return
 
@@ -243,7 +256,8 @@ async def manual_resume(ctx, channel_name=None, period="today"):
             summary = summarize(messages, target_channel)
             await thinking_msg.delete()
 
-            result_msg = f"📋 Résumé de #{target_channel} {time_desc} ({len(messages)} messages) :\n\n{summary}"
+            server_desc = f" sur **{server_name}**" if server_name else ""
+            result_msg = f"📋 Résumé de #{target_channel} {time_desc}{server_desc} ({len(messages)} messages) :\n\n{summary}"
             await safe_send(ctx, result_msg)
 
     except OpenAIError as e:
@@ -277,11 +291,15 @@ async def fetch_history(channel, days=7):
     """
     Fetch messages from Discord from the last `days` days or since last fetch known in DB.
     """
-    last_fetched = store.get_last_fetched(channel.name)
+    # Get server information
+    server_id = str(channel.guild.id) if channel.guild else None
+    server_name = channel.guild.name if channel.guild else None
+    
+    last_fetched = store.get_last_fetched(channel.name, server_id) if server_id else None
     after_date = last_fetched or (datetime.now(timezone.utc) - timedelta(days=days))
 
     logger.info(
-        f"Fetching Discord messages from #{channel.name} since {after_date.isoformat()}"
+        f"Fetching Discord messages from #{channel.name} on server {server_name} since {after_date.isoformat()}"
     )
 
     # Pulling message history from Discord
@@ -293,12 +311,15 @@ async def fetch_history(channel, days=7):
                     message.content,
                     channel.name,
                     message.created_at,
+                    server_id=server_id,
+                    server_name=server_name
                 )
 
         # Update last fetched timestamp
-        store.update_last_fetched(channel.name, datetime.now(timezone.utc))
+        if server_id:
+            store.update_last_fetched(channel.name, datetime.now(timezone.utc), server_id, server_name)
     except Exception as e:
-        logger.warning(f"Failed to fetch messages from #{channel.name}: {e}")
+        logger.warning(f"Failed to fetch messages from #{channel.name} on {server_name}: {e}")
 
 
 # ----------------------
