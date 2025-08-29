@@ -50,7 +50,7 @@ class MessageStore:
         logger.debug("Executing query: %s | params=%s", query, params)
         cursor = self.conn.execute(query, params)
         results = cursor.fetchall()
-        logger.debug("Fetched %d messages since %s", len(results), since_datetime)
+        logger.info("Fetched %d messages since %s", len(results), since_datetime)
 
         return results
 
