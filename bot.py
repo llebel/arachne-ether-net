@@ -99,6 +99,13 @@ async def on_message(message):
 @bot.command(name="resume")
 async def manual_resume(ctx):
     """Command to generate a summary manually."""
+    # Check if user is authorized
+    if ctx.author.id != config.AUTHORIZED_USER_ID:
+        logger.warning(
+            f"Unauthorized !resume attempt by {ctx.author} (ID: {ctx.author.id})"
+        )
+        return
+
     since = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
