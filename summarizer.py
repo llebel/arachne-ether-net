@@ -19,9 +19,9 @@ def summarize(messages):
 
     try:
         response = openai.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5-mini",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
+            max_completion_tokens=1000,
         )
         # ⚡ Use .content instead of ["content"]
         return response.choices[0].message.content.strip()
