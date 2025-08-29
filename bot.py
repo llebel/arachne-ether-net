@@ -58,7 +58,7 @@ async def on_ready():
     logger.info(f"{bot.user} est connecté.")
 
     # Fetch messages smartly
-    n_days = 7
+    n_days = config.FETCH_NB_DAYS
     logger.info(
         f"Populating database with {n_days} days of message history if needed..."
     )
@@ -314,7 +314,7 @@ async def manual_resume(ctx, channel_name=None, period="today"):
 # ----------------------
 # Utilities
 # ----------------------
-async def fetch_history(channel, days=7):
+async def fetch_history(channel, days):
     """
     Fetch messages from Discord from the last `days` days or since last fetch known in DB.
     """
