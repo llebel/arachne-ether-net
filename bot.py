@@ -175,10 +175,13 @@ async def manual_resume(ctx, channel_name=None, period="today"):
             if not active_channels:
                 await ctx.send(f"📋 Aucun message trouvé {time_desc} dans aucun canal.")
                 return
-                
+            
+            # Send initial "thinking" message
+            thinking_msg = await ctx.send(f"⚙️ Génération des résumés pour {len(active_channels)} canaux...")
+            
             summaries = []
             total_messages = 0
-            for channel in active_channels:
+            for i, channel in enumerate(active_channels):
                 if period_type == "range":
                     messages = store.get_messages_in_range(start_time, end_time, channel)
                 else:
@@ -186,8 +189,13 @@ async def manual_resume(ctx, channel_name=None, period="today"):
                     
                 if messages:
                     total_messages += len(messages)
+                    # Update progress
+                    await thinking_msg.edit(content=f"⚙️ Génération des résumés... ({i+1}/{len(active_channels)}) #{channel}")
                     summary = summarize(messages, channel)
                     summaries.append(f"**#{channel}** ({len(messages)} messages):\n{summary}")
+            
+            # Delete thinking message
+            await thinking_msg.delete()
             
             if summaries:
                 header = f"📋 Résumés de tous les canaux {time_desc} ({total_messages} messages sur {len(active_channels)} canaux) :\n\n"
@@ -215,16 +223,30 @@ async def manual_resume(ctx, channel_name=None, period="today"):
             if not messages:
                 await ctx.send(f"📋 Aucun message trouvé {time_desc} dans #{target_channel}.")
                 return
-                
+            
+            # Send thinking message for single channel
+            thinking_msg = await ctx.send(f"⚙️ Génération du résumé pour #{target_channel}...")
             summary = summarize(messages, target_channel)
+            await thinking_msg.delete()
+            
             await ctx.send(f"📋 Résumé de #{target_channel} {time_desc} ({len(messages)} messages) :\n\n{summary}")
             
     except OpenAIError as e:
         logger.error(f"OpenAI error while generating summary: {e}")
+        # Try to delete thinking message if it exists
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
         await ctx.send(f"⚠️ Impossible de générer le résumé pour l'instant : {str(e)}")
         return
     except Exception as e:
         logger.exception("Unexpected error in !resume command")
+        # Try to delete thinking message if it exists
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
         await ctx.send(f"⚠️ Une erreur inattendue est survenue : {str(e)}")
         return
 

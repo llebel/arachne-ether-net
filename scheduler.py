@@ -54,12 +54,30 @@ class DailySummary:
             total_messages = 0
             yesterday = now - timedelta(days=1)
             
-            for channel_name in active_channels:
+            # Send initial thinking message
+            thinking_msg = None
+            if summary_channel:
+                thinking_msg = await summary_channel.send(f"⚙️ Génération des résumés quotidiens pour {len(active_channels)} canaux...")
+            
+            for i, channel_name in enumerate(active_channels):
                 messages = store.get_messages_in_range(start_time, end_time, channel_name)
                 if messages:
                     total_messages += len(messages)
+                    # Update progress
+                    if thinking_msg:
+                        try:
+                            await thinking_msg.edit(content=f"⚙️ Génération des résumés quotidiens... ({i+1}/{len(active_channels)}) #{channel_name}")
+                        except:
+                            pass  # Message might have been deleted
                     summary = summarize(messages, channel_name)
                     summaries.append(f"**#{channel_name}** ({len(messages)} messages):\n{summary}")
+            
+            # Delete thinking message
+            if thinking_msg:
+                try:
+                    await thinking_msg.delete()
+                except:
+                    pass
             
             if summaries:
                 header = f"📋 Résumé du {yesterday.date()} au {now.date()} jusqu'à {SUMMARY_HOUR}h ({total_messages} messages sur {len(active_channels)} canaux) :\n\n"
