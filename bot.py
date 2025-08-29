@@ -340,7 +340,7 @@ async def fetch_history(channel, days=7):
     after_date = last_fetched or (datetime.now(timezone.utc) - timedelta(days=days))
 
     logger.info(
-        f"Fetching Discord messages from #{channel.name}({channel_id}) in category {category_name}({category_id}) on server {server_name} since {after_date.isoformat()}"
+        f"Fetching messages|{server_name}|{category_name}|{category_id}|#{channel.name}|{channel_id}|{after_date.isoformat()}"
     )
 
     # Pulling message history from Discord
@@ -370,7 +370,7 @@ async def fetch_history(channel, days=7):
             )
     except Exception as e:
         logger.warning(
-            f"Failed to fetch messages from #{channel.name}({channel_id}) on {server_name}: {e}"
+            f"Failed fetching  |{server_name}|{category_name}|{category_id}|#{channel.name}|{channel_id}: {e}"
         )
 
 
