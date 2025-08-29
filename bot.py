@@ -63,7 +63,7 @@ async def on_ready():
 
     # Fetch messages smartly
     n_days = 7
-    logger.info(f"Populating database with {n_days} days of message history...")
+    logger.info(f"Populating database with {n_days} days of message history if needed...")
     for guild in bot.guilds:
         for channel in guild.text_channels:
             try:
@@ -260,15 +260,16 @@ async def manual_resume(ctx, channel_name=None, period="today"):
 # ----------------------
 async def fetch_history(channel, days=7):
     """
-    Fetch messages from the last `days` days or since last fetch.
+    Fetch messages from Discord from the last `days` days or since last fetch known in DB.
     """
     last_fetched = store.get_last_fetched(channel.name)
     after_date = last_fetched or (datetime.now(timezone.utc) - timedelta(days=days))
 
     logger.info(
-        f"Fetching messages from #{channel.name} since {after_date.isoformat()}"
+        f"Fetching Discord messages from #{channel.name} since {after_date.isoformat()}"
     )
 
+    # Pulling message history from Discord
     try:
         async for message in channel.history(limit=None, after=after_date):
             if not message.author.bot:
