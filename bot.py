@@ -97,13 +97,16 @@ async def on_message(message):
 # ----------------------
 # ✅ Commande manuelle pour déclencher le résumé
 @bot.command(name="resume")
-async def manual_resume(ctx, channel_name=None):
+async def manual_resume(ctx, channel_name=None, period="today"):
     """Command to generate a summary manually.
     
     Usage:
-        !resume - Generate summary for current channel
-        !resume channel_name - Generate summary for specified channel
-        !resume all - Generate summaries for all active channels
+        !resume - Generate summary for current channel (today only)
+        !resume channel_name - Generate summary for specified channel (today only)
+        !resume all - Generate summaries for all active channels (today only)
+        !resume 3days - Summary for current channel from 3 days ago to now
+        !resume channel_name 3days - Summary for specified channel from 3 days ago to now
+        !resume all 7days - Summary for all channels from 7 days ago to now
     """
     # Check if user is authorized
     if ctx.author.id not in config.AUTHORIZED_USER_IDS:
@@ -112,48 +115,109 @@ async def manual_resume(ctx, channel_name=None):
         )
         return
 
-    since = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    # Parse period parameter for days (e.g., "3days", "7days", "1day")
+    days_back = None
+    if period and period.endswith("days"):
+        try:
+            days_back = int(period[:-4])  # Remove "days" suffix
+        except ValueError:
+            await ctx.send("⚠️ Format invalide. Utilisez par exemple: !resume all 3days")
+            return
+    elif period and period.endswith("day"):
+        try:
+            days_back = int(period[:-3])  # Remove "day" suffix
+        except ValueError:
+            await ctx.send("⚠️ Format invalide. Utilisez par exemple: !resume all 1day")
+            return
+    elif channel_name and channel_name.endswith("days"):
+        try:
+            days_back = int(channel_name[:-4])  # Remove "days" suffix
+            channel_name = None  # Reset channel to current channel
+        except ValueError:
+            await ctx.send("⚠️ Format invalide. Utilisez par exemple: !resume 3days")
+            return
+    elif channel_name and channel_name.endswith("day"):
+        try:
+            days_back = int(channel_name[:-3])  # Remove "day" suffix
+            channel_name = None  # Reset channel to current channel
+        except ValueError:
+            await ctx.send("⚠️ Format invalide. Utilisez par exemple: !resume 1day")
+            return
+
+    # Determine time range based on parameters
+    now = datetime.now(timezone.utc)
+    
+    if days_back:
+        # Custom days back
+        start_time = now - timedelta(days=days_back)
+        start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = now
+        if days_back == 1:
+            time_desc = f"des dernières 24 heures"
+        else:
+            time_desc = f"des {days_back} derniers jours"
+        period_type = "range"
+    else:
+        # Today only (default)
+        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = now
+        time_desc = f"depuis le {start_time.date()}"
+        period_type = "since"
 
     try:
         if channel_name == "all":
             # Generate summaries for all active channels
-            active_channels = store.get_active_channels(since)
+            if period_type == "range":
+                active_channels = store.get_active_channels_in_range(start_time, end_time)
+            else:
+                active_channels = store.get_active_channels(start_time)
+                
             if not active_channels:
-                await ctx.send("📋 Aucun message trouvé depuis minuit dans aucun canal.")
+                await ctx.send(f"📋 Aucun message trouvé {time_desc} dans aucun canal.")
                 return
                 
             summaries = []
+            total_messages = 0
             for channel in active_channels:
-                messages = store.get_messages_since(since, channel)
+                if period_type == "range":
+                    messages = store.get_messages_in_range(start_time, end_time, channel)
+                else:
+                    messages = store.get_messages_since(start_time, channel)
+                    
                 if messages:
+                    total_messages += len(messages)
                     summary = summarize(messages, channel)
                     summaries.append(f"**#{channel}** ({len(messages)} messages):\n{summary}")
             
             if summaries:
-                full_summary = f"📋 Résumés de tous les canaux depuis le {since.date()} :\n\n" + "\n\n---\n\n".join(summaries)
+                header = f"📋 Résumés de tous les canaux {time_desc} ({total_messages} messages sur {len(active_channels)} canaux) :\n\n"
+                full_summary = header + "\n\n---\n\n".join(summaries)
+                
                 # Split if too long for Discord
                 if len(full_summary) > 1800:
-                    await ctx.send(f"📋 Résumés de tous les canaux depuis le {since.date()} :")
+                    await ctx.send(header.rstrip())
                     for summary_part in summaries:
                         await ctx.send(summary_part)
                 else:
                     await ctx.send(full_summary)
             else:
-                await ctx.send("📋 Aucun message à résumer depuis minuit.")
+                await ctx.send(f"📋 Aucun message à résumer {time_desc}.")
                 
         else:
             # Generate summary for specific channel or current channel
             target_channel = channel_name or ctx.channel.name
-            messages = store.get_messages_since(since, target_channel)
+            
+            if period_type == "range":
+                messages = store.get_messages_in_range(start_time, end_time, target_channel)
+            else:
+                messages = store.get_messages_since(start_time, target_channel)
             
             if not messages:
-                await ctx.send(f"📋 Aucun message trouvé depuis minuit dans #{target_channel}.")
+                await ctx.send(f"📋 Aucun message trouvé {time_desc} dans #{target_channel}.")
                 return
                 
             summary = summarize(messages, target_channel)
-            await ctx.send(f"📋 Résumé de #{target_channel} depuis le {since.date()} ({len(messages)} messages) :\n\n{summary}")
+            await ctx.send(f"📋 Résumé de #{target_channel} {time_desc} ({len(messages)} messages) :\n\n{summary}")
             
     except OpenAIError as e:
         logger.error(f"OpenAI error while generating summary: {e}")

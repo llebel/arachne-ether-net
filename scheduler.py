@@ -12,6 +12,22 @@ def get_midnight_utc():
     now = datetime.now(timezone.utc)
     return datetime(now.year, now.month, now.day)
 
+def get_summary_time_range():
+    """Return start and end datetime for summary period:
+    - Start: Beginning of previous day (00:00 yesterday)
+    - End: Current summary hour today
+    """
+    now = datetime.now(timezone.utc)
+    yesterday = now - timedelta(days=1)
+    
+    # Start of previous day (00:00 yesterday)
+    start_time = datetime(yesterday.year, yesterday.month, yesterday.day, tzinfo=timezone.utc)
+    
+    # Current day up to summary hour
+    end_time = datetime(now.year, now.month, now.day, SUMMARY_HOUR, tzinfo=timezone.utc)
+    
+    return start_time, end_time
+
 class DailySummary:
     def __init__(self, bot):
         self.bot = bot
@@ -20,8 +36,8 @@ class DailySummary:
     async def run_daily_summary(self):
         now = datetime.now(timezone.utc)
         if now.hour == SUMMARY_HOUR and now.minute == 0:  # à XXh00 UTC
-            midnight = get_midnight_utc()
-            active_channels = store.get_active_channels(midnight)
+            start_time, end_time = get_summary_time_range()
+            active_channels = store.get_active_channels_in_range(start_time, end_time)
             
             summary_channel = discord.utils.get(self.bot.get_all_channels(), name=SUMMARY_CHANNEL)
             if not summary_channel:
@@ -29,22 +45,24 @@ class DailySummary:
                 return
             
             if not active_channels:
-                await summary_channel.send(f"📋 Aucune activité détectée le {now.date()}")
+                yesterday = now - timedelta(days=1)
+                await summary_channel.send(f"📋 Aucune activité détectée du {yesterday.date()} au {now.date()} jusqu'à {SUMMARY_HOUR}h")
                 return
             
             # Generate per-channel summaries
             summaries = []
             total_messages = 0
+            yesterday = now - timedelta(days=1)
             
             for channel_name in active_channels:
-                messages = store.get_messages_since(midnight, channel_name)
+                messages = store.get_messages_in_range(start_time, end_time, channel_name)
                 if messages:
                     total_messages += len(messages)
                     summary = summarize(messages, channel_name)
                     summaries.append(f"**#{channel_name}** ({len(messages)} messages):\n{summary}")
             
             if summaries:
-                header = f"📋 Résumé quotidien du {now.date()} ({total_messages} messages sur {len(active_channels)} canaux) :\n\n"
+                header = f"📋 Résumé du {yesterday.date()} au {now.date()} jusqu'à {SUMMARY_HOUR}h ({total_messages} messages sur {len(active_channels)} canaux) :\n\n"
                 
                 # Send summaries, splitting if too long
                 if len(header + "\n\n---\n\n".join(summaries)) > 1800:
@@ -55,6 +73,6 @@ class DailySummary:
                     full_summary = header + "\n\n---\n\n".join(summaries)
                     await summary_channel.send(full_summary)
             else:
-                await summary_channel.send(f"📋 Aucun message à résumer le {now.date()}")
+                await summary_channel.send(f"📋 Aucun message à résumer du {yesterday.date()} au {now.date()} jusqu'à {SUMMARY_HOUR}h")
             
             # Note: We don't clear messages anymore to maintain history

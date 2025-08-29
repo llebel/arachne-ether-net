@@ -67,6 +67,32 @@ class MessageStore:
 
         return results
 
+    def get_messages_in_range(self, start_datetime, end_datetime, channel=None):
+        """Return a list of tuples (author, content) for messages in date range.
+        
+        Args:
+            start_datetime: Start datetime for message retrieval
+            end_datetime: End datetime for message retrieval  
+            channel: Optional channel name to filter by. If None, returns all channels.
+        """
+        if channel:
+            query = "SELECT author, content FROM messages WHERE timestamp >= ? AND timestamp < ? AND channel = ? ORDER BY timestamp ASC"
+            params = (start_datetime.isoformat(), end_datetime.isoformat(), channel)
+        else:
+            query = "SELECT author, content FROM messages WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp ASC"
+            params = (start_datetime.isoformat(), end_datetime.isoformat())
+
+        logger.debug("Executing query: %s | params=%s", query, params)
+        cursor = self.conn.execute(query, params)
+        results = cursor.fetchall()
+        
+        if channel:
+            logger.info("Fetched %d messages from #%s between %s and %s", len(results), channel, start_datetime, end_datetime)
+        else:
+            logger.info("Fetched %d messages from all channels between %s and %s", len(results), start_datetime, end_datetime)
+
+        return results
+
     def get_last_fetched(self, channel):
         row = self.conn.execute(
             "SELECT last_fetched FROM channel_meta WHERE channel = ?", (channel,)
@@ -96,4 +122,16 @@ class MessageStore:
         results = [row[0] for row in cursor.fetchall()]
         
         logger.info("Found %d active channels since %s", len(results), since_datetime)
+        return results
+
+    def get_active_channels_in_range(self, start_datetime, end_datetime):
+        """Return list of channels that have messages in the given date range."""
+        query = "SELECT DISTINCT channel FROM messages WHERE timestamp >= ? AND timestamp < ? ORDER BY channel"
+        params = (start_datetime.isoformat(), end_datetime.isoformat())
+        
+        logger.debug("Executing query: %s | params=%s", query, params)
+        cursor = self.conn.execute(query, params)
+        results = [row[0] for row in cursor.fetchall()]
+        
+        logger.info("Found %d active channels between %s and %s", len(results), start_datetime, end_datetime)
         return results
