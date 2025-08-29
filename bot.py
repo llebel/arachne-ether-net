@@ -100,7 +100,7 @@ async def on_message(message):
 async def manual_resume(ctx):
     """Command to generate a summary manually."""
     # Check if user is authorized
-    if ctx.author.id != config.AUTHORIZED_USER_ID:
+    if ctx.author.id not in config.AUTHORIZED_USER_IDS:
         logger.warning(
             f"Unauthorized !resume attempt by {ctx.author} (ID: {ctx.author.id})"
         )

@@ -43,7 +43,7 @@ pip install -r requirements-dev.txt
 ```bash
 # Copy environment template
 cp .env.example .env
-# Edit .env with your Discord token, OpenAI API key, and authorized user ID
+# Edit .env with your Discord token, OpenAI API key, and authorized user IDs
 
 # Run the bot
 python bot.py
@@ -56,7 +56,7 @@ Required environment variables in `.env`:
 - `OPENAI_API_KEY`: OpenAI API key for summaries
 - `SUMMARY_CHANNEL`: Discord channel name for summaries (default: "résumés") 
 - `SUMMARY_HOUR`: UTC hour for daily summaries (default: 20)
-- `AUTHORIZED_USER_ID`: Discord user ID authorized to use `!resume` command
+- `AUTHORIZED_USER_IDS`: Comma-separated list of Discord user IDs authorized to use `!resume` command
 
 ## Database
 
