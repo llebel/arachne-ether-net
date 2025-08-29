@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Only enable DEBUG for our db module
-db_logger = logging.getLogger("db")
-db_logger.setLevel(logging.DEBUG)
+# db_logger = logging.getLogger("db")
+# db_logger.setLevel(logging.DEBUG)
 
 # ----------------------
 # Bot setup
