@@ -42,10 +42,12 @@ class DailySummary:
         now = datetime.now(timezone.utc)
         if now.hour == SUMMARY_HOUR and now.minute == 0:  # à XXh00 UTC
             start_time, end_time = get_summary_time_range()
-            
+
             # Get all servers with activity and process each separately
-            active_channels_all_servers = store.get_active_channels_in_range(start_time, end_time)
-            
+            active_channels_all_servers = store.get_active_channels_in_range(
+                start_time, end_time
+            )
+
             if not active_channels_all_servers:
                 # Try to find any summary channel to send "no activity" message
                 summary_channel = discord.utils.get(
@@ -57,29 +59,39 @@ class DailySummary:
                         f"📋 Aucune activité détectée du {yesterday.date()} au {now.date()} jusqu'à {SUMMARY_HOUR}h"
                     )
                 return
-            
+
             # Group channels by server
             servers = {}
-            for server_id, server_name, channel_name in active_channels_all_servers:
+            for (
+                server_id,
+                server_name,
+                channel_id,
+                channel_name,
+            ) in active_channels_all_servers:
                 if server_id not in servers:
-                    servers[server_id] = {'name': server_name, 'channels': []}
-                servers[server_id]['channels'].append(channel_name)
-            
+                    servers[server_id] = {"name": server_name, "channels": []}
+                servers[server_id]["channels"].append(channel_name)
+
             # Generate summaries for each server
             for server_id, server_data in servers.items():
-                server_name = server_data['name']
-                active_channels = server_data['channels']
-                
+                server_name = server_data["name"]
+                active_channels = server_data["channels"]
+
                 # Find summary channel for this specific server
                 summary_channel = None
                 for channel in self.bot.get_all_channels():
-                    if (channel.name == SUMMARY_CHANNEL and 
-                        channel.guild and str(channel.guild.id) == server_id):
+                    if (
+                        channel.name == SUMMARY_CHANNEL
+                        and channel.guild
+                        and str(channel.guild.id) == server_id
+                    ):
                         summary_channel = channel
                         break
-                
+
                 if not summary_channel:
-                    print(f"❌ Summary channel '{SUMMARY_CHANNEL}' not found on server {server_name}!")
+                    print(
+                        f"❌ Summary channel '{SUMMARY_CHANNEL}' not found on server {server_name}!"
+                    )
                     continue
 
                 # Generate per-channel summaries for this server
@@ -96,7 +108,10 @@ class DailySummary:
 
                 for i, channel_name in enumerate(active_channels):
                     messages = store.get_messages_in_range(
-                        start_time, end_time, channel_name, server_id
+                        start_time,
+                        end_time,
+                        channel_name=channel_name,
+                        server_id=server_id,
                     )
                     if messages:
                         total_messages += len(messages)

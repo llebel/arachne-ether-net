@@ -89,14 +89,23 @@ async def on_connect():
 async def on_message(message):
     if message.author.bot:
         return
-    
+
     # Get server information
     server_id = str(message.guild.id) if message.guild else None
     server_name = message.guild.name if message.guild else None
-    
+    channel_id = str(message.channel.id)
+
+    logger.info(
+        f"Seen message on server {server_name}({server_id}) / channel #{message.channel.name}({channel_id}) / user @{str(message.author)}"
+    )
     store.add_message(
-        str(message.author), message.content, message.channel.name, message.created_at,
-        server_id=server_id, server_name=server_name
+        str(message.author),
+        message.content,
+        message.channel.name,
+        message.created_at,
+        server_id=server_id,
+        server_name=server_name,
+        channel_id=channel_id,
     )
     await bot.process_commands(message)
 
@@ -189,7 +198,9 @@ async def manual_resume(ctx, channel_name=None, period="today"):
 
             if not active_channels:
                 server_desc = f" sur {server_name}" if server_name else ""
-                await ctx.send(f"📋 Aucun message trouvé {time_desc} dans aucun canal{server_desc}.")
+                await ctx.send(
+                    f"📋 Aucun message trouvé {time_desc} dans aucun canal{server_desc}."
+                )
                 return
 
             # Send initial "thinking" message
@@ -202,10 +213,12 @@ async def manual_resume(ctx, channel_name=None, period="today"):
             for i, channel in enumerate(active_channels):
                 if period_type == "range":
                     messages = store.get_messages_in_range(
-                        start_time, end_time, channel, server_id
+                        start_time, end_time, channel_name=channel, server_id=server_id
                     )
                 else:
-                    messages = store.get_messages_since(start_time, channel, server_id)
+                    messages = store.get_messages_since(
+                        start_time, channel_name=channel, server_id=server_id
+                    )
 
                 if messages:
                     total_messages += len(messages)
@@ -237,10 +250,15 @@ async def manual_resume(ctx, channel_name=None, period="today"):
 
             if period_type == "range":
                 messages = store.get_messages_in_range(
-                    start_time, end_time, target_channel, server_id
+                    start_time,
+                    end_time,
+                    channel_name=target_channel,
+                    server_id=server_id,
                 )
             else:
-                messages = store.get_messages_since(start_time, target_channel, server_id)
+                messages = store.get_messages_since(
+                    start_time, channel_name=target_channel, server_id=server_id
+                )
 
             if not messages:
                 server_desc = f" sur {server_name}" if server_name else ""
@@ -291,15 +309,20 @@ async def fetch_history(channel, days=7):
     """
     Fetch messages from Discord from the last `days` days or since last fetch known in DB.
     """
-    # Get server information
+    # Get server and channel information
     server_id = str(channel.guild.id) if channel.guild else None
     server_name = channel.guild.name if channel.guild else None
-    
-    last_fetched = store.get_last_fetched(channel.name, server_id) if server_id else None
+    channel_id = str(channel.id)
+
+    last_fetched = (
+        store.get_last_fetched(channel_id, server_id, channel.name)
+        if server_id
+        else None
+    )
     after_date = last_fetched or (datetime.now(timezone.utc) - timedelta(days=days))
 
     logger.info(
-        f"Fetching Discord messages from #{channel.name} on server {server_name} since {after_date.isoformat()}"
+        f"Fetching Discord messages from #{channel.name}({channel_id}) on server {server_name} since {after_date.isoformat()}"
     )
 
     # Pulling message history from Discord
@@ -312,14 +335,23 @@ async def fetch_history(channel, days=7):
                     channel.name,
                     message.created_at,
                     server_id=server_id,
-                    server_name=server_name
+                    server_name=server_name,
+                    channel_id=channel_id,
                 )
 
         # Update last fetched timestamp
         if server_id:
-            store.update_last_fetched(channel.name, datetime.now(timezone.utc), server_id, server_name)
+            store.update_last_fetched(
+                channel_id,
+                datetime.now(timezone.utc),
+                server_id,
+                server_name,
+                channel.name,
+            )
     except Exception as e:
-        logger.warning(f"Failed to fetch messages from #{channel.name} on {server_name}: {e}")
+        logger.warning(
+            f"Failed to fetch messages from #{channel.name}({channel_id}) on {server_name}: {e}"
+        )
 
 
 # ----------------------
