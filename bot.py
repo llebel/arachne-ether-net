@@ -114,14 +114,14 @@ async def on_message(message):
 # ----------------------
 # ✅ Manual command to trigger a summary generation
 @bot.command(name="resume")
-async def manual_resume(ctx, channel_name=None, period="today"):
+async def manual_resume(ctx, channel_name, period="today"):
     """Command to generate a summary manually.
 
     Usage:
-        !resume - Generate summary for current channel (today only)
+        !resume current - Generate summary for current channel (today only)
         !resume channel_name - Generate summary for specified channel (today only)
         !resume all - Generate summaries for all active channels (today only)
-        !resume 3days - Summary for current channel from 3 days ago to now
+        !resume current 3days - Summary for current channel from 3 days ago to now
         !resume channel_name 3days - Summary for specified channel from 3 days ago to now
         !resume all 7days - Summary for all channels from 7 days ago to now
 
@@ -147,20 +147,6 @@ async def manual_resume(ctx, channel_name=None, period="today"):
             days_back = int(period[:-3])  # Remove "day" suffix
         except ValueError:
             await ctx.send("⚠️ Format invalide. Utilisez par exemple: !resume all 1day")
-            return
-    elif channel_name and channel_name.endswith("days"):
-        try:
-            days_back = int(channel_name[:-4])  # Remove "days" suffix
-            channel_name = None  # Reset channel to current channel
-        except ValueError:
-            await ctx.send("⚠️ Format invalide. Utilisez par exemple: !resume 3days")
-            return
-    elif channel_name and channel_name.endswith("day"):
-        try:
-            days_back = int(channel_name[:-3])  # Remove "day" suffix
-            channel_name = None  # Reset channel to current channel
-        except ValueError:
-            await ctx.send("⚠️ Format invalide. Utilisez par exemple: !resume 1day")
             return
 
     # Determine time range based on parameters
@@ -255,7 +241,7 @@ async def manual_resume(ctx, channel_name=None, period="today"):
 
         else:
             # Generate summary for specific channel or current channel in current server
-            target_channel = channel_name or ctx.channel.name
+            target_channel = ctx.channel.name if channel_name == "current" else channel_name
 
             if period_type == "range":
                 messages = store.get_messages_in_range(
