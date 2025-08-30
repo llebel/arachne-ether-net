@@ -1,6 +1,7 @@
 import asyncio
 import discord
 from discord.ext import commands
+from discord import app_commands
 from discord.utils import _ColourFormatter
 from db import MessageStore
 from scheduler import DailySummary
@@ -56,6 +57,13 @@ scheduler = DailySummary(bot)
 @bot.event
 async def on_ready():
     logger.info(f"{bot.user} est connecté.")
+    
+    # Sync slash commands
+    try:
+        synced = await bot.tree.sync()
+        logger.info(f"Synced {len(synced)} command(s)")
+    except Exception as e:
+        logger.error(f"Failed to sync commands: {e}")
 
     # Fetch messages smartly
     n_days = config.FETCH_NB_DAYS
@@ -113,54 +121,37 @@ async def on_message(message):
 # Commands
 # ----------------------
 # ✅ Manual command to trigger a summary generation
-@bot.command(name="resume")
-async def manual_resume(ctx, channel_name, period="today"):
-    """Command to generate a summary manually.
-
-    Usage:
-        !resume current - Generate summary for current channel (today only)
-        !resume channel_name - Generate summary for specified channel (today only)
-        !resume all - Generate summaries for all active channels (today only)
-        !resume current 3days - Summary for current channel from 3 days ago to now
-        !resume channel_name 3days - Summary for specified channel from 3 days ago to now
-        !resume all 7days - Summary for all channels from 7 days ago to now
-
-    Note: Summaries now include channel category information where available.
-    """
+@bot.tree.command(name="resume", description="Generate a conversation summary")
+@app_commands.describe(
+    channel="Channel to summarize ('current', 'all', or channel name)",
+    days="Number of days to look back (default: today only)"
+)
+async def manual_resume(interaction: discord.Interaction, channel: str, days: int = 0):
+    """Slash command to generate a summary manually."""
+    
     # Check if user is authorized
-    if ctx.author.id not in config.AUTHORIZED_USER_IDS:
+    if interaction.user.id not in config.AUTHORIZED_USER_IDS:
         logger.warning(
-            f"Unauthorized !resume attempt by {ctx.author} (ID: {ctx.author.id})"
+            f"Unauthorized /resume attempt by {interaction.user} (ID: {interaction.user.id})"
         )
+        await interaction.response.send_message("⚠️ Vous n'êtes pas autorisé à utiliser cette commande.", ephemeral=True)
         return
 
-    # Parse period parameter for days (e.g., "3days", "7days", "1day")
-    days_back = None
-    if period and period.endswith("days"):
-        try:
-            days_back = int(period[:-4])  # Remove "days" suffix
-        except ValueError:
-            await ctx.send("⚠️ Format invalide. Utilisez par exemple: !resume all 3days")
-            return
-    elif period and period.endswith("day"):
-        try:
-            days_back = int(period[:-3])  # Remove "day" suffix
-        except ValueError:
-            await ctx.send("⚠️ Format invalide. Utilisez par exemple: !resume all 1day")
-            return
+    # Defer the response since this will take time
+    await interaction.response.defer()
 
-    # Determine time range based on parameters
+    # Determine time range based on days parameter
     now = datetime.now(timezone.utc)
-
-    if days_back:
+    
+    if days > 0:
         # Custom days back
-        start_time = now - timedelta(days=days_back)
+        start_time = now - timedelta(days=days)
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
         end_time = now
-        if days_back == 1:
+        if days == 1:
             time_desc = f"des dernières 24 heures"
         else:
-            time_desc = f"des {days_back} derniers jours"
+            time_desc = f"des {days} derniers jours"
         period_type = "range"
     else:
         # Today only (default)
@@ -170,11 +161,11 @@ async def manual_resume(ctx, channel_name, period="today"):
         period_type = "since"
 
     # Get current server information
-    server_id = str(ctx.guild.id) if ctx.guild else None
-    server_name = ctx.guild.name if ctx.guild else None
+    server_id = str(interaction.guild.id) if interaction.guild else None
+    server_name = interaction.guild.name if interaction.guild else None
 
     try:
-        if channel_name == "all":
+        if channel == "all":
             # Generate summaries for all active channels in current server
             if period_type == "range":
                 active_channels = store.get_active_channels_in_range(
@@ -185,49 +176,42 @@ async def manual_resume(ctx, channel_name, period="today"):
 
             if not active_channels:
                 server_desc = f" sur {server_name}" if server_name else ""
-                await ctx.send(
+                await interaction.followup.send(
                     f"📋 Aucun message trouvé {time_desc} dans aucun canal{server_desc}."
                 )
                 return
 
-            # Send initial "thinking" message
-            thinking_msg = await ctx.send(
+            # Send initial progress message
+            await interaction.followup.send(
                 f"⚙️ Génération des résumés pour {len(active_channels)} canaux sur {server_name}..."
             )
 
             summaries = []
             total_messages = 0
-            for i, channel in enumerate(active_channels):
+            for i, channel_name in enumerate(active_channels):
                 if period_type == "range":
                     messages = store.get_messages_in_range(
-                        start_time, end_time, channel_name=channel, server_id=server_id
+                        start_time, end_time, channel_name=channel_name, server_id=server_id
                     )
                 else:
                     messages = store.get_messages_since(
-                        start_time, channel_name=channel, server_id=server_id
+                        start_time, channel_name=channel_name, server_id=server_id
                     )
 
                 if messages:
                     total_messages += len(messages)
-                    # Update progress
-                    await thinking_msg.edit(
-                        content=f"⚙️ Génération des résumés... ({i+1}/{len(active_channels)}) #{channel}"
-                    )
                     # Get category information for this channel from channel_meta
                     _, category_name_cat = store.get_channel_category(
-                        channel_name=channel, server_id=server_id
+                        channel_name=channel_name, server_id=server_id
                     )
                     category_display = (
                         f" [{category_name_cat}]" if category_name_cat else ""
                     )
 
-                    summary = summarize(messages, channel)
+                    summary = summarize(messages, channel_name)
                     summaries.append(
-                        f"**#{channel}**{category_display} ({len(messages)} messages):\n{summary}"
+                        f"**#{channel_name}**{category_display} ({len(messages)} messages):\n{summary}"
                     )
-
-            # Delete thinking message
-            await thinking_msg.delete()
 
             if summaries:
                 server_desc = f" sur **{server_name}**" if server_name else ""
@@ -235,13 +219,13 @@ async def manual_resume(ctx, channel_name, period="today"):
                 full_summary = header + "\n\n---\n\n".join(summaries)
 
                 # Use safe_send to handle long messages
-                await safe_send(ctx, full_summary)
+                await safe_send(interaction, full_summary)
             else:
-                await ctx.send(f"📋 Aucun message à résumer {time_desc}.")
+                await interaction.followup.send(f"📋 Aucun message à résumer {time_desc}.")
 
         else:
             # Generate summary for specific channel or current channel in current server
-            target_channel = ctx.channel.name if channel_name == "current" else channel_name
+            target_channel = interaction.channel.name if channel == "current" else channel
 
             if period_type == "range":
                 messages = store.get_messages_in_range(
@@ -257,43 +241,32 @@ async def manual_resume(ctx, channel_name, period="today"):
 
             if not messages:
                 server_desc = f" sur {server_name}" if server_name else ""
-                await ctx.send(
+                await interaction.followup.send(
                     f"📋 Aucun message trouvé {time_desc} dans #{target_channel}{server_desc}."
                 )
                 return
 
-            # Send thinking message for single channel
-            thinking_msg = await ctx.send(
+            # Send progress message
+            await interaction.followup.send(
                 f"⚙️ Génération du résumé pour #{target_channel}..."
             )
             summary = summarize(messages, target_channel)
-            await thinking_msg.delete()
 
             server_desc = f" sur **{server_name}**" if server_name else ""
             result_msg = f"📋 Résumé de #{target_channel} {time_desc}{server_desc} ({len(messages)} messages) :\n\n{summary}"
-            await safe_send(ctx, result_msg)
+            await safe_send(interaction, result_msg)
 
     except OpenAIError as e:
         logger.error(f"OpenAI error while generating summary: {e}")
-        # Try to delete thinking message if it exists
-        try:
-            await thinking_msg.delete()
-        except:
-            pass
-        await ctx.send(f"⚠️ Impossible de générer le résumé pour l'instant : {str(e)}")
+        await interaction.followup.send(f"⚠️ Impossible de générer le résumé pour l'instant : {str(e)}")
         return
     except Exception as e:
-        logger.exception("Unexpected error in !resume command")
-        # Try to delete thinking message if it exists
-        try:
-            await thinking_msg.delete()
-        except:
-            pass
-        await ctx.send(f"⚠️ Une erreur inattendue est survenue : {str(e)}")
+        logger.exception("Unexpected error in /resume command")
+        await interaction.followup.send(f"⚠️ Une erreur inattendue est survenue : {str(e)}")
         return
 
     logger.info(
-        f"Résumé envoyé par la commande !resume dans {ctx.guild} / {ctx.channel}"
+        f"Résumé envoyé par la commande /resume dans {interaction.guild} / {interaction.channel}"
     )
 
 
