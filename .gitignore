@@ -8,6 +8,10 @@ venv/
 # sqlite db
 messages.db
 
+# nohup output
+nohup.out
+bot.log
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
