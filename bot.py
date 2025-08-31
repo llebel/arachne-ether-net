@@ -225,7 +225,7 @@ async def manual_resume(interaction: discord.Interaction, channel: str, days: in
 
         else:
             # Generate summary for specific channel or current channel in current server
-            target_channel = interaction.channel.name if channel == "current" else channel
+            target_channel = interaction.channel.name if channel == "current" else channel # type: ignore
 
             if period_type == "range":
                 messages = store.get_messages_in_range(

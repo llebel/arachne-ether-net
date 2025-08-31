@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Read corresponding variables
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+DISCORD_TOKEN = str(os.getenv("DISCORD_TOKEN"))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SUMMARY_CHANNEL = os.getenv("SUMMARY_CHANNEL", "summaries")  # default value
 SUMMARY_HOUR = int(os.getenv("SUMMARY_HOUR", 20))  # default value: 20h UTC
